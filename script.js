@@ -9,33 +9,63 @@ pieces_values.set(game.ROOK, 5)
 pieces_values.set(game.QUEEN, 12)
 pieces_values.set(game.KING , 20)
 
-var board_state_history = []
 
+function monteCarloSearch(game_state, max_time, is_maximizing){
+  temp_data = new Map() //stored data - key: fen , value: tuple(score_sum, simulations_num)
+  exec_time = new Date().getTime() + max_time
+  while(exec_time > new Date().getTime()){
+    state_list = []
+    leaf = selection(is_maximizing, game_state, state_list) // keep track on path
+    leaf = expand(leaf, state_list)
+    //value = simulation(leaf) omit because js is not appropiate for such hard computing tasks
+    backpropagation(leaf)
+  }
 
-function evalBoard(game_state){
-  let max = game_state.indexOf(' ')
-  let value = 0
-  for(let i = 0; i < board_state_history.length; i++){
-    if(board_state_history[i].slice(0, max) == game_state.slice(0, max)){
-      console.log("repetition")
-      if(game_state.includes('w'))
-        value -= 30
-      else
-        value += 30
+  function selection(is_maximizing, game_state, state_list){
+    moves = game_state.moves()
+    move_val_tuple = []
+    // choose best route
+    for(i=0;i<moves.length;i++){
+      game_state.move(moves[i])
+      value = temp_data.get(game_state.fen())
+      if(typeof value == "undefined")
+        value = evalBoard(game_state)
+      move_val_tuple.push((moves[i], value))
     }
   }
-  for(let i = 0; i < max; i++){
-    if(/[A-Z]/.test(game_state[i]))
-      value += pieces_values.get(game_state[i].toLowerCase())
-    else if(/[a-z]/.test(game_state[i]))
-      value -= pieces_values.get(game_state[i])
+}
+
+function evalBoard(game_state_v){
+  let value = 0
+  game_state = game_state_v.fen()
+  let max = game_state.indexOf(' ')
+
+  if(game_state_v.in_checkmate()){
+    if(game_state.includes('w'))
+      return {"score": -500}
+    else
+      return {"score": 500}
+  }
+  else if(game_state_v.in_draw()){
+    if(game_state.includes('w'))
+      return {"score": 200}
+    else
+      return {"score": -200}
+  }
+  else{
+    for(let i = 0; i < max; i++){
+      if(/[A-Z]/.test(game_state[i]))
+        value += pieces_values.get(game_state[i].toLowerCase())
+      else if(/[a-z]/.test(game_state[i]))
+        value -= pieces_values.get(game_state[i])
+    }
   }
   return {"score":value}
 }
 
 function minimax(depth, game, alfa,beta, isMaximisingPlayer) {
   if (depth === 0 || game.game_over()) {
-      return evalBoard(game.fen());
+      return evalBoard(game);
   }
   var newGameMoves = game.moves();
   var temp_score = 0
@@ -80,21 +110,22 @@ function makeRandomMove () {
   // exit if the game is over
   if (game.game_over()) return
 
-  board_state_history.push(game.fen())
   var possibleMoves = game.moves()
   let move
-  if(round_counter > 24){
+  let depth = 3
+
+  if(round_counter > 25){
     if(round_counter%2) //minimize score
-      move = minimax(3,game,-9999,9999, false)
+      move = minimax(depth,game,-9999,9999, false)
     else                // maximize score
-      move = minimax(2,game,-9999,9999, true)
+      move = minimax(depth,game,-9999,9999, true)
   game.move(move.move)
   }else{
     var randomIdx = Math.floor(Math.random() * possibleMoves.length)
     move = possibleMoves[randomIdx]
     game.move(move)
   }
-  console.log("score: " + move.score + " move: " + move.move)
+  console.log("score: " + move.score + " move: " + move.move + "round: " + round_counter)
   round_counter++
   board.position(game.fen())
 
