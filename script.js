@@ -9,6 +9,8 @@ pieces_values.set(game.ROOK, 5)
 pieces_values.set(game.QUEEN, 12)
 pieces_values.set(game.KING , 20)
 
+temp_data = new Map()
+
 
 function monteCarloSearch(game_state, max_time, is_maximizing){
   temp_data = new Map() //stored data - key: fen , value: tuple(score_sum, simulations_num)
@@ -36,54 +38,55 @@ function monteCarloSearch(game_state, max_time, is_maximizing){
   }
 }
 
-function randomMonteCarlo(game_state, max_time, is_maximizing){
-  temp_data = new Map() //stored data - key: fen , value: tuple(score_sum, simulations_num)
+function randomMonteCarlo(game_state, max_time, is_maximizing, depth){
+  //temp_data = new Map() //stored data - key: fen , value: tuple(score_sum, simulations_num)
   exec_time = new Date().getTime() + max_time
   while(exec_time > new Date().getTime()){
-    randomSelection(is_maximizing, game_state)
+    randomSelection(game_state, depth)
   }
 
   //select best move
   moves = game_state.moves()
-  temp_value = -1
+  temp_value = -100
   move = null
   for(i=0;i<moves.length;i++){
-    game_state.move(move)
+    game_state.move(moves[i])
     if(temp_data.has(game_state.fen())){
       temp_node = temp_data.get(game_state.fen())
       if(is_maximizing){
         if(temp_node.value/temp_node.sim_num > temp_value){
-          
+          temp_value = temp_node.value/temp_node.sim_num
+          move = moves[i]
         }
       }else{
         if(temp_node.value/temp_node.sim_num < temp_value){
-
+          temp_value = temp_node.value/temp_node.sim_num
+          move = moves[i]
         }
       }
     }
     game_state.undo()
   }
-  game_state.move(move)
-  return move
+  return {"move":move , "score": temp_value}
 
-  function randomSelection(game_state){
+  function randomSelection(game_state, depth){
 
-    if(game_state.game_over()){
-      if(game_state.in_checkmate()){
+    if(game_state.game_over() || depth < 1){
+      /* if(game_state.in_checkmate()){
         if(game_state.fen().includes('w')){
-          return 1
+          return 100
         }else{
-          return -1
+          return -100
         }
       }else if(game_state.in_draw()){
         if(game_state.fen().includes('w')){
-          return 0.5
+          return -50
         }else{
-          return -0.5
+          return 50
         }
-      }else{
-        return 0
-      }
+      }else{ */
+        return evalBoard(game_state)
+      // }
     }
 
     moves = game_state.moves()
@@ -91,15 +94,17 @@ function randomMonteCarlo(game_state, max_time, is_maximizing){
     move = moves[randomIdx]
     game_state.move(move)
 
-    final_value = randomSelection(game_state)
+    final_value = randomSelection(game_state, depth-1)
 
     if(temp_data.has(game_state.fen())){
       temp_node = temp_data.get(game_state.fen())
-      temp_data.set(game_state.fen(), {"value":temp_node.value+final_value,"sim_num":temp_node.sim_num+1})
+      temp_data.set(game_state.fen(), {"value":temp_node.value+final_value.score,"sim_num":temp_node.sim_num+1})
     }else{
-      temp_data.set(game_state.fen(), {"value":final_value,"sim_num":1})
+      temp_data.set(game_state.fen(), {"value":final_value.score,"sim_num":1})
     }
     game_state.undo()
+
+    return final_value
   }
 }
 
@@ -182,11 +187,11 @@ function makeRandomMove () {
   let move
   let depth = 3
 
-  if(round_counter > 25){
+  if(round_counter > -1){
     if(round_counter%2) //minimize score
       move = minimax(depth,game,-9999,9999, false)
     else                // maximize score
-      move = minimax(depth,game,-9999,9999, true)
+      move = randomMonteCarlo(game, 50000, true, 10)
   game.move(move.move)
   }else{
     var randomIdx = Math.floor(Math.random() * possibleMoves.length)
