@@ -30,8 +30,76 @@ function monteCarloSearch(game_state, max_time, is_maximizing){
       value = temp_data.get(game_state.fen())
       if(typeof value == "undefined")
         value = evalBoard(game_state)
-      move_val_tuple.push((moves[i], value))
+      else
+        move_val_tuple.push((moves[i], value))
     }
+  }
+}
+
+function randomMonteCarlo(game_state, max_time, is_maximizing){
+  temp_data = new Map() //stored data - key: fen , value: tuple(score_sum, simulations_num)
+  exec_time = new Date().getTime() + max_time
+  while(exec_time > new Date().getTime()){
+    randomSelection(is_maximizing, game_state)
+  }
+
+  //select best move
+  moves = game_state.moves()
+  temp_value = -1
+  move = null
+  for(i=0;i<moves.length;i++){
+    game_state.move(move)
+    if(temp_data.has(game_state.fen())){
+      temp_node = temp_data.get(game_state.fen())
+      if(is_maximizing){
+        if(temp_node.value/temp_node.sim_num > temp_value){
+          
+        }
+      }else{
+        if(temp_node.value/temp_node.sim_num < temp_value){
+
+        }
+      }
+    }
+    game_state.undo()
+  }
+  game_state.move(move)
+  return move
+
+  function randomSelection(game_state){
+
+    if(game_state.game_over()){
+      if(game_state.in_checkmate()){
+        if(game_state.fen().includes('w')){
+          return 1
+        }else{
+          return -1
+        }
+      }else if(game_state.in_draw()){
+        if(game_state.fen().includes('w')){
+          return 0.5
+        }else{
+          return -0.5
+        }
+      }else{
+        return 0
+      }
+    }
+
+    moves = game_state.moves()
+    var randomIdx = Math.floor(Math.random() * moves.length)
+    move = moves[randomIdx]
+    game_state.move(move)
+
+    final_value = randomSelection(game_state)
+
+    if(temp_data.has(game_state.fen())){
+      temp_node = temp_data.get(game_state.fen())
+      temp_data.set(game_state.fen(), {"value":temp_node.value+final_value,"sim_num":temp_node.sim_num+1})
+    }else{
+      temp_data.set(game_state.fen(), {"value":final_value,"sim_num":1})
+    }
+    game_state.undo()
   }
 }
 
