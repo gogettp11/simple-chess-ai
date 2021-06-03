@@ -7,16 +7,110 @@ pieces_values.set(game.KNIGHT, 3)
 pieces_values.set(game.BISHOP, 4)
 pieces_values.set(game.ROOK, 5)
 pieces_values.set(game.QUEEN, 12)
-pieces_values.set(game.KING , 20)
+pieces_values.set(game.KING , 40)
 
-MCTS_CONST = 1.4
+function customExp(base, x){return Math.pow(base,x)}
+
+MCTS_CONST = 1
 
 temp_data = new Map() //stored data - key: sliced fen , value: tuple(score_sum, simulations_num)
 temp_data2 = new Map() //stored data - key: sliced fen , value: tuple(score_sum, simulations_num)
+temp_data3 = new Map() //stored data - key: sliced fen , value: tuple(score_sum, simulations_num)
 
 function fenConversion(fen_string){
   max = fen_string.indexOf(' ') //search for space
   return fen_string.slice(0,max)
+}
+
+function weightedChoice(array, weights, base) {
+  new_weights = weights.map(function(e){return customExp(base, e)})
+  let s = new_weights.reduce((a, e) => a + e);
+  let r = Math.random() * s;
+  return array.find((e, i) => (r -= new_weights[i]) < 0);
+}
+
+function customMonteCarlo(game_state, max_time, is_maximizing, max_depth){
+  exec_time = new Date().getTime() + max_time
+  current_state_fen = game_state.fen()
+  while(exec_time > new Date().getTime()){
+    path = []
+    value = selection(is_maximizing, game_state, path, max_depth) // selection, extend, and simulation step
+    game_state.load(current_state_fen)
+    backpropagation(path, value, game_state)
+    game_state.load(current_state_fen)
+  }
+
+  moves = game_state.moves()
+  temp_value = 0
+  if(is_maximizing)
+    temp_value = -9999
+  else
+    temp_value = 9999
+
+  move = null
+  for(i=0;i<moves.length;i++){
+    game_state.move(moves[i])
+    if(temp_data3.has(fenConversion(game_state.fen()))){
+      temp_node = temp_data3.get(fenConversion(game_state.fen()))
+      if(is_maximizing){
+        if(temp_node.value/temp_node.sim_num > temp_value){
+          temp_value = temp_node.value/temp_node.sim_num
+          move = moves[i]
+        }
+      }else{
+        if(temp_node.value/temp_node.sim_num < temp_value){
+          temp_value = temp_node.value/temp_node.sim_num
+          move = moves[i]
+        }
+      }
+    }
+    game_state.undo()
+  }
+  return {"move":move , "score": temp_value}
+
+  function backpropagation(path, value, game_state){
+    for(i=0;i<path.length;i++){
+      game_state.move(path[i])
+      if(!temp_data3.has(fenConversion(game_state.fen()))) // add new 
+        temp_data3.set(fenConversion(game_state.fen()), {"value":evalBoard(game_state).score,"sim_num":1})
+      else{  //update existing
+        temp_node = temp_data3.get(fenConversion(game_state.fen()))
+        temp_data3.set(fenConversion(game_state.fen()), {"value":temp_node.value+value,"sim_num":temp_node.sim_num+1})
+      }
+    }
+  }
+
+  function selection(is_maximizing, game_state, path, max_depth){
+
+    if(max_depth < 1 || game_state.game_over()){
+      return evalBoard(game_state).score
+    }
+
+    moves = game_state.moves()
+    weight_array = []
+    move_array = []
+    //calculate probabilty distribution
+    for(i=0;i<moves.length;i++){
+      game_state.move(moves[i])
+      move_array.push(moves[i])
+      if(temp_data3.has(fenConversion(game_state.fen()))){ // value based on history
+        temp_node = temp_data3.get(fenConversion(game_state.fen()))
+        weight_array.push(temp_node.value/temp_node.sim_num)
+      } // new value
+      else
+        weight_array.push(evalBoard(game_state).score)
+      game_state.undo()
+    }
+    //choose one node randomly from distribution
+    base = Math.E
+    if(!is_maximizing)
+      base = 0.5
+    best_move = weightedChoice(move_array, weight_array, base)
+    path.push(best_move)
+    game_state.move(best_move)
+    //loop
+    return selection(!is_maximizing, game_state, path, max_depth-1)
+  }
 }
 
 function monteCarloSearch(game_state, max_time, is_maximizing, max_depth){
@@ -278,11 +372,13 @@ function makeRandomMove () {
   if(round_counter > 4){
     if(round_counter%2){ //minimize score
       //move = minimax(depth,game,-9999,9999, false)
-      move = monteCarloSearch(game, 5000, false, 10)
+      //move = monteCarloSearch(game, 3000, false, 2)
+      move = customMonteCarlo(game, 4000, false, 3)
     }
     else{                // maximize score
-      //move = minimax(depth,game,-9999,9999, true)
-      move = randomMonteCarlo(game, 5000, true, 9)
+      move = minimax(depth,game,-9999,9999, true)
+      //move = randomMonteCarlo(game, 2000, true, 3)
+      //move = monteCarloSearch(game, 4000, true, 3)
     }
   game.move(move.move)
   }else{
@@ -290,7 +386,7 @@ function makeRandomMove () {
     move = possibleMoves[randomIdx]
     game.move(move)
   }
-  console.log("score: " + move.score + " move: " + move.move + "round: " + round_counter)
+  console.log("score: " + move.score + " move: " + move.move + " round: " + round_counter)
   round_counter++
   board.position(game.fen())
 
